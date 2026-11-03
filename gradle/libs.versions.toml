@@ -1,0 +1,19 @@
+[versions]
+# Spring Boot 3.5.x (Spring Framework 6) -- see README for why this is pinned.
+spring-boot = "3.5.16"
+spring-dependency-management = "1.1.7"
+# pact-jvm 4.4+ documents `pact.rootDir` as unchanged; 4.5/4.6 are the stable Spring 6 era releases.
+pact-jvm = "4.6.21"
+# The pact Gradle plugin (pactVerify / pactPublish / canIDeploy) is versioned independently.
+pact-gradle-plugin = "4.6.21"
+appVersion = "0.1.0"
+
+[libraries]
+pact-consumer-junit5 = { module = "au.com.dius.pact.consumer:junit5", version.ref = "pact-jvm" }
+pact-provider-junit5 = { module = "au.com.dius.pact.provider:junit5", version.ref = "pact-jvm" }
+pact-provider-junit5spring = { module = "au.com.dius.pact.provider:junit5spring", version.ref = "pact-jvm" }
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version.ref = "spring-dependency-management" }
+pact = { id = "au.com.dius.pact", version.ref = "pact-gradle-plugin" }

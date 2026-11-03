@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: pact
+      POSTGRES_PASSWORD: pact
+      POSTGRES_DB: pact
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+  broker:
+    image: pactfoundation/pact-broker:latest
+    ports: ["9292:9292"]
+    depends_on: [postgres]
+    environment:
+      PACT_BROKER_DATABASE_URL: "postgres://pact:pact@postgres/pact"
+      PACT_BROKER_BASIC_AUTH_USERNAME: "pact"
+      PACT_BROKER_BASIC_AUTH_PASSWORD: "pact"
+      PACT_BROKER_ALLOW_PUBLIC_READ: "true"
+
+volumes: { pgdata: {} }
