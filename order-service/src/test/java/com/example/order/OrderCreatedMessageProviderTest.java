@@ -13,14 +13,20 @@ import au.com.dius.pact.provider.junit5.PactVerificationContext;
 import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvider;
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.State;
-import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
+import au.com.dius.pact.provider.junitsupport.loader.PactBroker;
+import au.com.dius.pact.provider.junitsupport.loader.PactBrokerAuth;
 
 /**
  * Message provider side: verifies the order.created pact published by notification-service against the
- * message order-service actually produces.
+ * message order-service actually produces. Pacts and results come from and go to the Pact Broker.
  */
 @Provider("order-service-messages")
-@PactFolder("${pact.pactdir}")
+@PactBroker(
+        url = "${pactbroker.url}",
+        authentication =
+                @PactBrokerAuth(
+                        username = "${pactbroker.auth.username}",
+                        password = "${pactbroker.auth.password}"))
 class OrderCreatedMessageProviderTest {
 
     private final OrderCreatedEventPublisher publisher = new OrderCreatedEventPublisher();

@@ -6,11 +6,20 @@ services:
       POSTGRES_PASSWORD: pact
       POSTGRES_DB: pact
     volumes: ["pgdata:/var/lib/postgresql/data"]
+    # The broker has connect_max_retries: 0, so it must not start before Postgres
+    # accepts connections. depends_on alone only waits for the container to start.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pact -d pact"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
   broker:
     image: pactfoundation/pact-broker:latest
     ports: ["9292:9292"]
-    depends_on: [postgres]
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       PACT_BROKER_DATABASE_URL: "postgres://pact:pact@postgres/pact"
       PACT_BROKER_BASIC_AUTH_USERNAME: "pact"

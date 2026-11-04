@@ -1,5 +1,6 @@
 plugins {
     java
+    alias(libs.plugins.pact)
 }
 
 dependencies {
@@ -10,4 +11,26 @@ dependencies {
     testImplementation(libs.pact.consumer.junit5)
     testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+/**
+ * Broker settings come from the environment so nothing secret is committed:
+ * PACT_BROKER_BASE_URL / PACT_BROKER_USERNAME / PACT_BROKER_PASSWORD.
+ */
+pact {
+    broker {
+        pactBrokerUrl = System.getenv("PACT_BROKER_BASE_URL") ?: "http://localhost:9292"
+        if (System.getenv("PACT_BROKER_USERNAME") != null) {
+            pactBrokerUsername = System.getenv("PACT_BROKER_USERNAME")
+            pactBrokerPassword = System.getenv("PACT_BROKER_PASSWORD")
+        }
+    }
+    publish {
+        consumerBranch = System.getenv("PACT_CONSUMER_BRANCH") ?: "main"
+        pactDirectory =
+            layout.buildDirectory
+                .dir("pacts")
+                .get()
+                .asFile.absolutePath
+    }
 }

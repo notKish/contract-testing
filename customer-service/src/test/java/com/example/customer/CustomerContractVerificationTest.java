@@ -11,19 +11,25 @@ import au.com.dius.pact.provider.junit5.PactVerificationContext;
 import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvider;
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.State;
-import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
+import au.com.dius.pact.provider.junitsupport.loader.PactBroker;
+import au.com.dius.pact.provider.junitsupport.loader.PactBrokerAuth;
 
 /**
  * Verifies the HTTP pacts published by order-service against the running
  * application.
  *
  * <p>
- * Reads pacts from -Dpact.pactdir (set by this project's build script,
- * overridable for a broker export).
- * The verifier calls the app over real HTTP, the way the consumer will.
+ * Pacts and the verification results come from and go to the Pact Broker
+ * (docker-compose.broker.yml). The verifier calls the app over real HTTP, the
+ * way the consumer will.
  */
 @Provider("customer-service")
-@PactFolder("${pact.pactdir}")
+@PactBroker(
+    url = "${pactbroker.url}",
+    authentication =
+        @PactBrokerAuth(
+            username = "${pactbroker.auth.username}",
+            password = "${pactbroker.auth.password}"))
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class CustomerContractVerificationTest {
 

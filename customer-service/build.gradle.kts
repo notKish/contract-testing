@@ -22,11 +22,13 @@ dependencies {
 }
 
 tasks.withType<Test>().configureEach {
-    // Where this provider reads its partner pacts from. Override with -Dpact.pactdir=... (e.g. a broker export).
-    systemProperty(
-        "pact.pactdir",
-        System.getProperty("pact.pactdir")
-            ?: rootProject.file("order-service/build/pacts").absolutePath,
-    )
-    dependsOn(":order-service:test")
+    // Pacts come from the broker, so this needs `docker compose -f docker-compose.broker.yml up -d`.
+    // Credentials come from the environment; the values below match docker-compose.broker.yml.
+    systemProperty("pactbroker.url", System.getenv("PACT_BROKER_BASE_URL") ?: "http://localhost:9292")
+    systemProperty("pactbroker.auth.username", System.getenv("PACT_BROKER_USERNAME") ?: "pact")
+    systemProperty("pactbroker.auth.password", System.getenv("PACT_BROKER_PASSWORD") ?: "pact")
+    // Verification results are published back to the broker, keyed by provider version + branch.
+    systemProperty("pact.provider.version", project.version.toString())
+    systemProperty("pact.provider.branch", System.getenv("PACT_PROVIDER_BRANCH") ?: "main")
+    systemProperty("pact.verifier.publishResults", "true")
 }

@@ -34,32 +34,38 @@ contract-testing/
 
 ## Run
 
-```bash
-./gradlew test             # everything, including both verifications, from a clean tree
-./gradlew :order-service:test          # HTTP consumer + message provider
-./gradlew :customer-service:test       # HTTP provider (runs order-service tests first)
-```
-
-Pacts are written to `<service>/build/pacts/` (`pact.rootDir`, per project). Providers read their
-partner's pacts from `<partner>/build/pacts/` via `-Dpact.pactdir`, so the Gradle task graph does the
-plumbing — provider `test` tasks depend on the matching consumer `test` tasks.
-
-### Local Pact Broker
+The provider tests verify **against the broker**, so start it first:
 
 ```bash
-docker compose -f docker-compose.broker.yml up -d
-open http://localhost:9292           # pact / pact
-
+docker compose -f docker-compose.broker.yml up -d   # broker + postgres
 export PACT_BROKER_BASE_URL=http://localhost:9292
 export PACT_BROKER_USERNAME=pact PACT_BROKER_PASSWORD=pact
 
-./gradlew :order-service:pactPublish         # publishes order-service's pacts
-./gradlew :order-service:pactVerify          # broker-backed verify against order-service
+./gradlew :order-service:test :notification-service:test   # consumer tests generate pacts
+./gradlew :order-service:pactPublish :notification-service:pactPublish
+./gradlew test                                            # verifies from the broker, publishes results
 ```
 
-`pactPublish`/`pactVerify` come from the `au.com.dius.pact` Gradle plugin. `test` uses the JUnit 5
-verification (`@PactFolder`) and needs no broker. Override the pact source with
-`-Dpact.pactdir=/path/to/exported/pacts` to verify a broker export or CI artefact.
+Pacts are still written locally to `<service>/build/pacts/` (`pact.rootDir`, per project) — that is
+what `pactPublish` uploads. The broker is the source of truth for verification: provider tests are
+annotated `@PactBroker` and push their results back under provider version `0.1.0`, branch `main`
+(`PACT_PROVIDER_BRANCH` to override; consumers use `PACT_CONSUMER_BRANCH`).
+
+### Deployment safety check
+
+```bash
+alias pact-broker='docker run --rm -e PACT_BROKER_BASE_URL -e PACT_BROKER_USERNAME \
+  -e PACT_BROKER_PASSWORD --add-host=host.docker.internal:host-gateway pactfoundation/pact-cli pact-broker'
+
+export PACT_BROKER_BASE_URL=http://host.docker.internal:9292   # the CLI runs in a container
+
+pact-broker record-deployment --pacticipant customer-service --version 0.1.0 --environment production
+pact-broker can-i-deploy --pacticipant order-service --version 0.1.0 --to-environment production
+# Computer says yes — until a provider verification fails, then Computer says no.
+```
+
+`/can-i-deploy` needs the *provider* version to be deployed (or tagged) somewhere, otherwise the
+broker answers "no such version exists" with `deployable: null`.
 
 ## Maven → Gradle mapping
 
@@ -84,8 +90,12 @@ Version pins (`gradle/libs.versions.toml`), all verified against Maven Central:
   interaction; the transport (topic, broker) is your application's concern, not pact-jvm's. There is
   no `consumer:kafka` artefact on Maven Central — that is the Pact *plugin* ecosystem, only needed
   for Protobuf/gRPC/Avro payloads.
-- `@PactFolder("${pact.pactdir}")` is interpolated by pact-jvm; `@PactUrl` is **not**, hence the
-  directory loader. The property comes from `-Dpact.pactdir=...` set on the `Test` task.
+- **Broker wiring that matters for `@PactBroker`:** `pactbroker.url` and `pactbroker.auth.*` are
+  interpolated into the annotation from system properties; verification results are only published
+  when `pact.verifier.publishResults=true` **and** `pact.provider.version` is set (both are set on
+  the `Test` task in the provider builds). Without a provider version the broker rejects the result.
+- `@PactFolder` interpolates `${...}`, but `@PactUrl` does not — that is why folder-based verification
+  used a property, and why the broker path uses `@PactBroker(url = "${pactbroker.url}")`.
 - Provider tests set their target in `@BeforeEach`, not inside the `@TestTemplate` body —
   `PactVerificationExtension.beforeTestExecution` needs the target already configured.
 - Gradle configuration cache is on (`gradle.properties`). Anything reading `System.getenv` at
