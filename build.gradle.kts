@@ -2,19 +2,39 @@
 // The project version is the git commit, not a hand-edited build number.
 // It keys every pact verification result in the broker, so a fixed value like "0.1.0" silently
 // overwrites the previous result on each build: a failing verification gets masked by a later
-// passing one. `--dirty` marks results produced from uncommitted code. PACT_VERSION overrides it
-// for CI systems that expose their own identifier, or for builds without a git checkout.
+// passing one. PACT_VERSION overrides it for CI systems that expose their own identifier, or for
+// builds without a git checkout.
+//
+// Uncommitted work appends `-dirty-<hash of the working tree diff>`. A bare `-dirty` is not enough:
+// the broker rejects a pact whose content changed under an unchanged consumer version ("Cannot
+// change the content of the pact ... Each pact must be published with a unique consumer version
+// number"), which is what happens the moment you edit a contract without committing it.
+fun git(vararg args: String): String =
+    providers
+        .exec {
+            commandLine("git", *args)
+            isIgnoreExitValue = true
+        }.standardOutput
+        .asText
+        .get()
+        .trim()
+
+fun shortHash(text: String): String =
+    java.security.MessageDigest.getInstance("SHA-1")
+        .digest(text.toByteArray())
+        .take(4)
+        .joinToString("") { "%02x".format(it) }
+
 val pactVersion: String =
     providers.environmentVariable("PACT_VERSION").orNull
-        ?: providers
-            .exec {
-                commandLine("git", "describe", "--always", "--dirty", "--abbrev=12")
-                isIgnoreExitValue = true
-            }.standardOutput
-            .asText
-            .get()
-            .trim()
-            .ifEmpty { "0.0.0-unknown" }
+        ?: run {
+            val sha = git("describe", "--always", "--abbrev=12").ifEmpty { "0.0.0-unknown" }
+            if (git("status", "--porcelain").isEmpty()) {
+                sha
+            } else {
+                "$sha-dirty-${shortHash(git("diff", "HEAD"))}"
+            }
+        }
 
 allprojects {
     group = "com.example.contracttesting"
@@ -48,4 +68,32 @@ subprojects {
             events("passed", "skipped", "failed")
         }
     }
+tasks.register<Copy>("downloadJavadocs") {
+    val ownGroup = project.group.toString()
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    val deps = listOf("runtimeClasspath", "testRuntimeClasspath")
+        .flatMap {
+            project.configurations.getByName(it)
+                .resolvedConfiguration.lenientConfiguration.artifacts
+        }
+        .map { it.moduleVersion.id }
+        .filter { it.group != ownGroup }
+        .filter { it.name == "consumer" }   // only this artifact
+        .distinct()
+        .map { project.dependencies.create("${it.group}:${it.name}:${it.version}:javadoc@jar") }
+        .toTypedArray()
+
+    val jars = project.configurations.detachedConfiguration(*deps)
+        .resolvedConfiguration.lenientConfiguration
+        .getArtifacts()
+        .map { it.file }
+
+    jars.forEach { jar ->
+        from(zipTree(jar)) {
+            into(jar.nameWithoutExtension.removeSuffix("-javadoc"))
+        }
+    }
+    into(rootProject.layout.buildDirectory.dir("javadocs"))
+}
 }
