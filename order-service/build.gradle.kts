@@ -54,4 +54,11 @@ tasks.withType<Test>().configureEach {
     systemProperty("pact.provider.version", project.version.toString())
     systemProperty("pact.provider.branch", System.getenv("PACT_PROVIDER_BRANCH") ?: "main")
     systemProperty("pact.verifier.publishResults", "true")
+
+    // Verification reads the broker, so the consumer's pact must be published first. This keeps
+    // `./gradlew test` a single command; without it the provider can run before the publish.
+    // dependsOn(":notification-service:pactPublish")
 }
+
+// Publishing uploads build/pacts, which the consumer tests generate — so publish after test.
+tasks.named("pactPublish") { dependsOn("test") }

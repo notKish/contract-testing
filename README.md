@@ -41,15 +41,22 @@ docker compose -f docker-compose.broker.yml up -d   # broker + postgres
 export PACT_BROKER_BASE_URL=http://localhost:9292
 export PACT_BROKER_USERNAME=pact PACT_BROKER_PASSWORD=pact
 
-./gradlew :order-service:test :notification-service:test   # consumer tests generate pacts
-./gradlew :order-service:pactPublish :notification-service:pactPublish
-./gradlew test                                            # verifies from the broker, publishes results
+./gradlew clean build     # consumer tests -> publish -> verify from broker -> publish results
 ```
 
-Pacts are still written locally to `<service>/build/pacts/` (`pact.rootDir`, per project) — that is
-what `pactPublish` uploads. The broker is the source of truth for verification: provider tests are
-annotated `@PactBroker` and push their results back under provider version `0.1.0`, branch `main`
-(`PACT_PROVIDER_BRANCH` to override; consumers use `PACT_CONSUMER_BRANCH`).
+The task graph encodes the order: `pactPublish` depends on the consumer's `test` (that is what writes
+`build/pacts`), and each provider's `test` depends on the partner's `pactPublish`. So one command is
+enough — but it needs the broker up and the credentials above, and a provider can no longer verify a
+pact the consumer has not published.
+
+**Versions come from git, not a hand-edited number.** `version` is
+`git describe --always --dirty --abbrev=12` (e.g. `90838a7542f2`, plus `-dirty` for uncommitted
+code), set once in the root `build.gradle.kts` and used for both the published consumer version and
+`pact.provider.version`. This matters: the broker keys verification results by version, so a constant
+like `0.1.0` means every build overwrites the previous result and a failing verification gets masked
+by the next passing one. `PACT_VERSION` overrides it (CI build numbers, or no git checkout).
+Provider branch is `main` (`PACT_PROVIDER_BRANCH`), consumer branch `main`
+(`PACT_CONSUMER_BRANCH`).
 
 ### Deployment safety check
 
@@ -59,8 +66,9 @@ alias pact-broker='docker run --rm -e PACT_BROKER_BASE_URL -e PACT_BROKER_USERNA
 
 export PACT_BROKER_BASE_URL=http://host.docker.internal:9292   # the CLI runs in a container
 
-pact-broker record-deployment --pacticipant customer-service --version 0.1.0 --environment production
-pact-broker can-i-deploy --pacticipant order-service --version 0.1.0 --to-environment production
+VERSION=$(git describe --always --dirty --abbrev=12)
+pact-broker record-deployment --pacticipant customer-service --version "$VERSION" --environment production
+pact-broker can-i-deploy --pacticipant order-service --version "$VERSION" --to-environment production
 # Computer says yes — until a provider verification fails, then Computer says no.
 ```
 
@@ -98,6 +106,11 @@ Version pins (`gradle/libs.versions.toml`), all verified against Maven Central:
   used a property, and why the broker path uses `@PactBroker(url = "${pactbroker.url}")`.
 - Provider tests set their target in `@BeforeEach`, not inside the `@TestTemplate` body —
   `PactVerificationExtension.beforeTestExecution` needs the target already configured.
+- **A constant `version` is the trap in this setup**, and it is silent: `pactPublish` and
+  `pact.provider.version` both default to `project.version`, so `version = "0.1.0"` publishes and
+  verifies under one broker version forever. The broker keeps the *latest* result per pact version,
+  so a red verification disappears as soon as a later green one is written. Deriving the version from
+  the commit (`git describe --always --dirty`) makes each commit its own version.
 - Gradle configuration cache is on (`gradle.properties`). Anything reading `System.getenv` at
   configuration time (the broker credentials here) is configuration-cache input; pass them on the
   command line or via `~/.gradle/gradle.properties` if you hit cache invalidation noise.

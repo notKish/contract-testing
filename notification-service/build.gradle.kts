@@ -34,3 +34,6 @@ pact {
                 .asFile.absolutePath
     }
 }
+
+// Publishing uploads build/pacts, which the consumer tests generate — so publish after test.
+tasks.named("pactPublish") { dependsOn("test") }

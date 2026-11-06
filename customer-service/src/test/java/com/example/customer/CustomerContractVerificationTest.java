@@ -24,12 +24,7 @@ import au.com.dius.pact.provider.junitsupport.loader.PactBrokerAuth;
  * way the consumer will.
  */
 @Provider("customer-service")
-@PactBroker(
-    url = "${pactbroker.url}",
-    authentication =
-        @PactBrokerAuth(
-            username = "${pactbroker.auth.username}",
-            password = "${pactbroker.auth.password}"))
+@PactBroker(url = "${pactbroker.url}", authentication = @PactBrokerAuth(username = "${pactbroker.auth.username}", password = "${pactbroker.auth.password}"))
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class CustomerContractVerificationTest {
 
@@ -52,5 +47,25 @@ class CustomerContractVerificationTest {
     // The controller serves this fixture from a constant; nothing to seed.
     // if there a db involved in setting up tests, we might need to
     // interact with db in this block
+  }
+
+  @State("customer 9f8c4a1e-0000-4000-8000-000000000000 does not exist")
+  void customerDoesNotExist() {
+    // Nothing to seed: CustomerController answers 404 for any id but its fixture.
+  }
+
+  @State("customers exist")
+  void customersExist() {
+    // The list endpoint always returns its fixture customer.
+  }
+
+  @State("a customer can be created")
+  void aCustomerCanBeCreated() {
+    // The controller assigns an id and echoes the submitted fields.
+  }
+
+  @State("a customer cannot be created without a name")
+  void aCustomerCannotBeCreatedWithoutAName() {
+    // The controller rejects a blank name with 400; nothing to seed.
   }
 }
