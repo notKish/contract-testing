@@ -14,19 +14,24 @@ dependencies {
 }
 
 /**
- * Broker settings come from the environment so nothing secret is committed:
- * PACT_BROKER_BASE_URL / PACT_BROKER_USERNAME / PACT_BROKER_PASSWORD.
+ * Broker settings come from the environment so nothing secret is committed.
+ * PACT_BROKER_BASE_URL plus either PACT_BROKER_TOKEN (PactFlow) or
+ * PACT_BROKER_USERNAME/PACT_BROKER_PASSWORD (the local docker broker).
  */
+val brokerToken = System.getenv("PACT_BROKER_TOKEN")
+
 pact {
     broker {
         pactBrokerUrl = System.getenv("PACT_BROKER_BASE_URL") ?: "http://localhost:9292"
-        if (System.getenv("PACT_BROKER_USERNAME") != null) {
+        if (brokerToken != null) {
+            pactBrokerToken = brokerToken
+        } else if (System.getenv("PACT_BROKER_USERNAME") != null) {
             pactBrokerUsername = System.getenv("PACT_BROKER_USERNAME")
             pactBrokerPassword = System.getenv("PACT_BROKER_PASSWORD")
         }
     }
     publish {
-        consumerBranch = System.getenv("PACT_CONSUMER_BRANCH") ?: "main"
+        consumerBranch = rootProject.extra["pactConsumerBranch"] as String
         pactDirectory =
             layout.buildDirectory
                 .dir("pacts")

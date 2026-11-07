@@ -23,19 +23,24 @@ dependencies {
 }
 
 /**
- * Broker settings come from the environment so nothing secret is committed:
- * PACT_BROKER_BASE_URL / PACT_BROKER_USERNAME / PACT_BROKER_PASSWORD.
+ * Broker settings come from the environment so nothing secret is committed.
+ * PACT_BROKER_BASE_URL plus either PACT_BROKER_TOKEN (PactFlow) or
+ * PACT_BROKER_USERNAME/PACT_BROKER_PASSWORD (the local docker broker).
  */
+val brokerToken = System.getenv("PACT_BROKER_TOKEN")
+
 pact {
     broker {
         pactBrokerUrl = System.getenv("PACT_BROKER_BASE_URL") ?: "http://localhost:9292"
-        if (System.getenv("PACT_BROKER_USERNAME") != null) {
+        if (brokerToken != null) {
+            pactBrokerToken = brokerToken
+        } else if (System.getenv("PACT_BROKER_USERNAME") != null) {
             pactBrokerUsername = System.getenv("PACT_BROKER_USERNAME")
             pactBrokerPassword = System.getenv("PACT_BROKER_PASSWORD")
         }
     }
     publish {
-        consumerBranch = System.getenv("PACT_CONSUMER_BRANCH") ?: "main"
+        consumerBranch = rootProject.extra["pactConsumerBranch"] as String
         pactDirectory =
             layout.buildDirectory
                 .dir("pacts")
@@ -48,11 +53,13 @@ tasks.withType<Test>().configureEach {
     // Pacts come from the broker, so this needs `docker compose -f docker-compose.broker.yml up -d`.
     // Credentials come from the environment; the values below match docker-compose.broker.yml.
     systemProperty("pactbroker.url", System.getenv("PACT_BROKER_BASE_URL") ?: "http://localhost:9292")
-    systemProperty("pactbroker.auth.username", System.getenv("PACT_BROKER_USERNAME") ?: "pact")
-    systemProperty("pactbroker.auth.password", System.getenv("PACT_BROKER_PASSWORD") ?: "pact")
+    // pact-jvm uses basic auth whenever a username is set, so the token case has to blank it.
+    systemProperty("pactbroker.auth.username", if (brokerToken != null) "" else System.getenv("PACT_BROKER_USERNAME") ?: "pact")
+    systemProperty("pactbroker.auth.password", if (brokerToken != null) "" else System.getenv("PACT_BROKER_PASSWORD") ?: "pact")
+    systemProperty("pactbroker.auth.token", brokerToken ?: "")
     // Verification results are published back to the broker, keyed by provider version + branch.
     systemProperty("pact.provider.version", project.version.toString())
-    systemProperty("pact.provider.branch", System.getenv("PACT_PROVIDER_BRANCH") ?: "main")
+    systemProperty("pact.provider.branch", rootProject.extra["pactProviderBranch"] as String)
     systemProperty("pact.verifier.publishResults", "true")
 
     // Verification reads the broker, so the consumer's pact must be published first. This keeps

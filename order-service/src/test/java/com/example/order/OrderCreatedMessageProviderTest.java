@@ -26,7 +26,8 @@ import au.com.dius.pact.provider.junitsupport.loader.PactBrokerAuth;
         authentication =
                 @PactBrokerAuth(
                         username = "${pactbroker.auth.username}",
-                        password = "${pactbroker.auth.password}"))
+                        password = "${pactbroker.auth.password}",
+                        token = "${pactbroker.auth.token}"))
 class OrderCreatedMessageProviderTest {
 
     private final OrderCreatedEventPublisher publisher = new OrderCreatedEventPublisher();

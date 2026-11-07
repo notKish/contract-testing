@@ -6,12 +6,15 @@ spring-dependency-management = "1.1.7"
 pact-jvm = "4.6.21"
 # The pact Gradle plugin (pactVerify / pactPublish / canIDeploy) is versioned independently.
 pact-gradle-plugin = "4.6.21"
+# Generates /v3/api-docs from the Spring controllers; 2.8.x targets Spring Boot 3.x.
+springdoc = "2.8.6"
 appVersion = "0.1.0"
 
 [libraries]
 pact-consumer-junit5 = { module = "au.com.dius.pact.consumer:junit5", version.ref = "pact-jvm" }
 pact-provider-junit5 = { module = "au.com.dius.pact.provider:junit5", version.ref = "pact-jvm" }
 pact-provider-junit5spring = { module = "au.com.dius.pact.provider:junit5spring", version.ref = "pact-jvm" }
+springdoc-openapi-webmvc-api = { module = "org.springdoc:springdoc-openapi-starter-webmvc-api", version.ref = "springdoc" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

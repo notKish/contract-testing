@@ -5,4 +5,4 @@ plugins {
 
 rootProject.name = "contract-testing"
 
-include("customer-service", "order-service", "notification-service")
+include("order-service", "notification-service")

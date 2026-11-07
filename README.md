@@ -1,12 +1,16 @@
 # Contract testing (Pact + Gradle)
 
-Consumer-driven contract testing between three Spring Boot services, on a **Gradle** build
+Consumer-driven contract testing between Spring Boot services, on a **Gradle** build
 (the original snippets were Maven; the mapping is at the bottom).
 
 ```text
-order-service (consumer)  ──HTTP──>  customer-service (provider)
+order-service (consumer)  ──HTTP──>  customer-service (provider, separate repo)
 notification-service (consumer)  ──Kafka "order.created"──>  order-service (provider)
 ```
+
+`customer-service` was extracted to
+[notKish/customer-service](https://github.com/notKish/customer-service); it publishes its own
+OpenAPI provider contract from there.
 
 ## Layout
 
@@ -15,9 +19,6 @@ contract-testing/
 ├── docker-compose.broker.yml
 ├── build.gradle.kts                    # shared conventions (Java 21, pact.rootDir)
 ├── gradle/libs.versions.toml           # single place for all versions
-├── customer-service/                   # HTTP provider
-│   ├── build.gradle.kts
-│   └── src/test/java/.../CustomerContractVerificationTest.java
 ├── order-service/                      # HTTP consumer + message provider
 │   ├── src/test/java/.../CustomerPactTest.java                 # generates the HTTP pact
 │   └── src/test/java/.../OrderCreatedMessageProviderTest.java  # verifies the message pact
@@ -34,7 +35,7 @@ contract-testing/
 
 ## Run
 
-The provider tests verify **against the broker**, so start it first:
+The message provider test verifies **against the broker**, so start it first:
 
 ```bash
 docker compose -f docker-compose.broker.yml up -d   # broker + postgres
@@ -45,9 +46,12 @@ export PACT_BROKER_USERNAME=pact PACT_BROKER_PASSWORD=pact
 ```
 
 The task graph encodes the order: `pactPublish` depends on the consumer's `test` (that is what writes
-`build/pacts`), and each provider's `test` depends on the partner's `pactPublish`. So one command is
-enough — but it needs the broker up and the credentials above, and a provider can no longer verify a
-pact the consumer has not published.
+`build/pacts`), and the message provider's `test` depends on the partner's `pactPublish`. So one
+command is enough — but it needs the broker up and the credentials above, and a provider can no longer
+verify a pact the consumer has not published.
+
+`customer-service` is no longer part of this build: its pact verification and provider-contract
+publishing live in the extracted repo.
 
 **Versions come from git, not a hand-edited number.** `version` is
 `git describe --always --dirty --abbrev=12` (e.g. `90838a7542f2`, plus `-dirty` for uncommitted
@@ -55,22 +59,79 @@ code), set once in the root `build.gradle.kts` and used for both the published c
 `pact.provider.version`. This matters: the broker keys verification results by version, so a constant
 like `0.1.0` means every build overwrites the previous result and a failing verification gets masked
 by the next passing one. `PACT_VERSION` overrides it (CI build numbers, or no git checkout).
-Provider branch is `main` (`PACT_PROVIDER_BRANCH`), consumer branch `main`
-(`PACT_CONSUMER_BRANCH`).
+Provider branch and consumer branch default to the **checked-out git branch** (e.g. `feat/pactflow`),
+not to `main`; `PACT_PROVIDER_BRANCH` and `PACT_CONSUMER_BRANCH` override them per side. Set those
+in CI, where the checkout is usually a detached HEAD and the fallback is `main`.
+
+## Bi-directional contract testing (PactFlow)
+
+`customer-service` publishes a **provider contract** — an OpenAPI 3.0 document generated from the
+application — and PactFlow compares the pacts published by `order-service` against it. Neither side
+has to run the other's verification test: publishing either contract triggers the comparison.
+
+```text
+order-service pact ─┐
+                    ├─► PactFlow (compares both) ─► can-i-deploy
+customer-service OAS┘
+```
+
+The provider half lives in [notKish/customer-service](https://github.com/notKish/customer-service):
+
+```bash
+# in the provider repo
+./gradlew publishProviderContract      # OpenAPI contract + self-verification evidence
+
+# here
+./gradlew :order-service:pactPublish   # consumer pacts
+```
+
+**PactFlow is required.** The local docker broker in `docker-compose.broker.yml` stores and verifies
+pacts, but it cannot compare a pact against an OpenAPI document. Point the build at PactFlow instead
+of the local broker and use a token (the build also accepts basic auth for the local broker):
+
+```bash
+export PACT_BROKER_BASE_URL=https://<tenant>.pactflow.io
+export PACT_BROKER_TOKEN=<token from Settings -> API Tokens>
+```
+
+Provider-side details (springdoc document generation, the OpenAPI annotations the pacts depend on,
+and the self-verification evidence PactFlow requires) are documented in that repo's README. Two
+things worth knowing from here:
+
+- PactFlow rejects `--verification-success` on its own with `selfVerificationResults.content is
+  missing`; the provider task attaches a results file, so the failure is not in this repo.
+- The consumer-driven verifier for these pacts now runs there (`./gradlew test`), against the same
+  broker and provider version.
 
 ### Deployment safety check
 
+Against PactFlow (the same CLI image, bearer token instead of basic auth):
+
 ```bash
-alias pact-broker='docker run --rm -e PACT_BROKER_BASE_URL -e PACT_BROKER_USERNAME \
-  -e PACT_BROKER_PASSWORD --add-host=host.docker.internal:host-gateway pactfoundation/pact-cli pact-broker'
+alias pact-broker='docker run --rm -e PACT_BROKER_BASE_URL -e PACT_BROKER_TOKEN \
+  pactfoundation/pact-cli pact-broker'
 
-export PACT_BROKER_BASE_URL=http://host.docker.internal:9292   # the CLI runs in a container
+export PACT_BROKER_BASE_URL=https://<tenant>.pactflow.io
+export PACT_BROKER_TOKEN=<token>
 
-VERSION=$(git describe --always --dirty --abbrev=12)
-pact-broker record-deployment --pacticipant customer-service --version "$VERSION" --environment production
+VERSION=$(./gradlew -q properties | sed -n 's/^version: //p' | head -1)   # this repo = order-service
+# The provider version comes from its own repo: ./gradlew -q properties | sed -n 's/^version: //p'
+PROVIDER_VERSION=<customer-service version>
+pact-broker record-deployment --pacticipant customer-service --version "$PROVIDER_VERSION" --environment production
 pact-broker can-i-deploy --pacticipant order-service --version "$VERSION" --to-environment production
-# Computer says yes — until a provider verification fails, then Computer says no.
+# Computer says yes — until a provider verification or an OpenAPI comparison fails, then Computer says no.
 ```
+
+Or through the Gradle plugin (order-service):
+
+```bash
+./gradlew :order-service:canIDeploy -Ppacticipant=order-service \
+  -PpacticipantVersion="$VERSION" -PtoEnvironment=production
+```
+
+For the local broker, swap the alias' `-e PACT_BROKER_TOKEN` for `-e PACT_BROKER_USERNAME -e
+PACT_BROKER_PASSWORD`, set `PACT_BROKER_BASE_URL=http://host.docker.internal:9292` (the CLI runs in a
+container) and add `--add-host=host.docker.internal:host-gateway`.
 
 `/can-i-deploy` needs the *provider* version to be deployed (or tagged) somewhere, otherwise the
 broker answers "no such version exists" with `deployable: null`.
@@ -90,6 +151,9 @@ Version pins (`gradle/libs.versions.toml`), all verified against Maven Central:
   Spring 5.3, while 4.6.21 also works with the Spring 6 BOM below. Bump both together if you move.
 - `spring-boot` **3.5.16** (Spring Framework 6.2). The `dependencyManagement` block applies Boot's
   BOM so pact-jvm's transitive Spring 5.x cannot leak into a Boot 3 app.
+- `springdoc-openapi-starter-webmvc-api` **2.8.6** generates the provider contract in the extracted
+  `customer-service` repo. The document is forced to OAS 3.0 there (`springdoc.api-docs.version`),
+  the broadest input for PactFlow's comparison.
 - `au.com.dius.pact` Gradle plugin **4.6.21**.
 
 ## Notes and gotchas
@@ -98,6 +162,11 @@ Version pins (`gradle/libs.versions.toml`), all verified against Maven Central:
   interaction; the transport (topic, broker) is your application's concern, not pact-jvm's. There is
   no `consumer:kafka` artefact on Maven Central — that is the Pact *plugin* ecosystem, only needed
   for Protobuf/gRPC/Avro payloads.
+- **Broker auth is token-first.** When `PACT_BROKER_TOKEN` is set it wins over
+  `PACT_BROKER_USERNAME`/`PACT_BROKER_PASSWORD` for pact publishing, `canIDeploy` and the provider
+  tests. `pact-jvm` internally prefers basic auth whenever a username is present, so the token case
+  blanks the username system property (`pactbroker.auth.username=""`). Getting this backwards
+  yields a 401 from PactFlow, not a configuration error.
 - **Broker wiring that matters for `@PactBroker`:** `pactbroker.url` and `pactbroker.auth.*` are
   interpolated into the annotation from system properties; verification results are only published
   when `pact.verifier.publishResults=true` **and** `pact.provider.version` is set (both are set on
