@@ -60,5 +60,16 @@ tasks.withType<Test>().configureEach {
     // dependsOn(":notification-service:pactPublish")
 }
 
-// Publishing uploads build/pacts, which the consumer tests generate — so publish after test.
-tasks.named("pactPublish") { dependsOn("test") }
+// Publishing only needs the pacts the consumer tests generate. Depending on `test` would also run the
+// message provider verification, which needs the partner's pact to already be in the broker — a
+// deadlock on a cold broker.
+val pactConsumerTest =
+    tasks.register<Test>("pactConsumerTest") {
+        description = "Runs only the consumer contract tests that generate this service's pacts."
+        group = "verification"
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath
+        filter { includeTestsMatching("*PactTest") }
+    }
+
+tasks.named("pactPublish") { dependsOn(pactConsumerTest) }

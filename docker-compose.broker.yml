@@ -25,5 +25,7 @@ services:
       PACT_BROKER_BASIC_AUTH_USERNAME: "pact"
       PACT_BROKER_BASIC_AUTH_PASSWORD: "pact"
       PACT_BROKER_ALLOW_PUBLIC_READ: "true"
+      # No Example App/Example API seed data and no pre-made environments: a genuinely empty broker.
+      PACT_BROKER_SEED_EXAMPLE_DATA: "false"
 
 volumes: { pgdata: {} }
