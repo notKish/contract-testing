@@ -41,4 +41,13 @@ pact {
 }
 
 // Publishing uploads build/pacts, which the consumer tests generate — so publish after test.
-tasks.named("pactPublish") { dependsOn("test") }
+tasks.named("pactPublish") {
+    dependsOn("test")
+    // Captured as a plain value: touching rootProject inside doFirst breaks the configuration cache.
+    val treeClean = rootProject.extra["pactTreeClean"] as Boolean
+    doFirst {
+        check(treeClean) {
+            "Working tree is dirty: commit first so the consumer version is a real commit hash."
+        }
+    }
+}

@@ -53,12 +53,17 @@ verify a pact the consumer has not published.
 `customer-service` is no longer part of this build: its pact verification and provider-contract
 publishing live in the extracted repo.
 
-**Versions come from git, not a hand-edited number.** `version` is
-`git describe --always --dirty --abbrev=12` (e.g. `90838a7542f2`, plus `-dirty` for uncommitted
-code), set once in the root `build.gradle.kts` and used for both the published consumer version and
-`pact.provider.version`. This matters: the broker keys verification results by version, so a constant
-like `0.1.0` means every build overwrites the previous result and a failing verification gets masked
-by the next passing one. `PACT_VERSION` overrides it (CI build numbers, or no git checkout).
+**Versions are commit hashes, not a hand-edited number.** `version` is
+`git rev-parse --short=12 HEAD`, set once in the root `build.gradle.kts` and used for both the
+published consumer version and `pact.provider.version`. This matters: the broker keys verification
+results by version, so a constant like `0.1.0` means every build overwrites the previous result and a
+failing verification gets masked by the next passing one. `PACT_VERSION` overrides it (CI build
+numbers, or no git checkout).
+
+A version must identify exactly one tree, so a dirty working tree is never published:
+`pactPublish` refuses to run, and test runs from a dirty tree do not publish their verification
+results (`pact.verifier.publishResults` is off). Commit before publishing.
+
 Provider branch and consumer branch default to the **checked-out git branch** (e.g. `feat/pactflow`),
 not to `main`; `PACT_PROVIDER_BRANCH` and `PACT_CONSUMER_BRANCH` override them per side. Set those
 in CI, where the checkout is usually a detached HEAD and the fallback is `main`.
@@ -178,8 +183,8 @@ Version pins (`gradle/libs.versions.toml`), all verified against Maven Central:
 - **A constant `version` is the trap in this setup**, and it is silent: `pactPublish` and
   `pact.provider.version` both default to `project.version`, so `version = "0.1.0"` publishes and
   verifies under one broker version forever. The broker keeps the *latest* result per pact version,
-  so a red verification disappears as soon as a later green one is written. Deriving the version from
-  the commit (`git describe --always --dirty`) makes each commit its own version.
+  so a red verification disappears as soon as a later green one is written. Using the commit hash
+  makes each commit its own version, and refusing dirty publishes keeps the hash honest.
 - Gradle configuration cache is on (`gradle.properties`). Anything reading `System.getenv` at
   configuration time (the broker credentials here) is configuration-cache input; pass them on the
   command line or via `~/.gradle/gradle.properties` if you hit cache invalidation noise.

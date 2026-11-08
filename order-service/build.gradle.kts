@@ -58,9 +58,10 @@ tasks.withType<Test>().configureEach {
     systemProperty("pactbroker.auth.password", if (brokerToken != null) "" else System.getenv("PACT_BROKER_PASSWORD") ?: "pact")
     systemProperty("pactbroker.auth.token", brokerToken ?: "")
     // Verification results are published back to the broker, keyed by provider version + branch.
+    // A dirty tree would attach uncommitted behaviour to a commit hash, so it only tests locally.
     systemProperty("pact.provider.version", project.version.toString())
     systemProperty("pact.provider.branch", rootProject.extra["pactProviderBranch"] as String)
-    systemProperty("pact.verifier.publishResults", "true")
+    systemProperty("pact.verifier.publishResults", (rootProject.extra["pactTreeClean"] as Boolean).toString())
 
     // Verification reads the broker, so the consumer's pact must be published first. This keeps
     // `./gradlew test` a single command; without it the provider can run before the publish.
@@ -79,4 +80,13 @@ val pactConsumerTest =
         filter { includeTestsMatching("*PactTest") }
     }
 
-tasks.named("pactPublish") { dependsOn(pactConsumerTest) }
+tasks.named("pactPublish") {
+    dependsOn(pactConsumerTest)
+    // Captured as a plain value: touching rootProject inside doFirst breaks the configuration cache.
+    val treeClean = rootProject.extra["pactTreeClean"] as Boolean
+    doFirst {
+        check(treeClean) {
+            "Working tree is dirty: commit first so the consumer version is a real commit hash."
+        }
+    }
+}

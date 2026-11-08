@@ -1,14 +1,12 @@
-// Root build: shared configuration for the three service projects.
-// The project version is the git commit, not a hand-edited build number.
-// It keys every pact verification result in the broker, so a fixed value like "0.1.0" silently
-// overwrites the previous result on each build: a failing verification gets masked by a later
-// passing one. PACT_VERSION overrides it for CI systems that expose their own identifier, or for
-// builds without a git checkout.
+// Root build: shared configuration for the service projects.
+// The project version is the git commit hash, not a hand-edited build number and not a
+// "-dirty" variant. It keys every pact verification result in the broker, so a fixed value like
+// "0.1.0" silently overwrites the previous result on each build: a failing verification gets masked
+// by a later passing one. PACT_VERSION overrides it for CI systems that expose their own identifier,
+// or for builds without a git checkout.
 //
-// Uncommitted work appends `-dirty-<hash of the working tree diff>`. A bare `-dirty` is not enough:
-// the broker rejects a pact whose content changed under an unchanged consumer version ("Cannot
-// change the content of the pact ... Each pact must be published with a unique consumer version
-// number"), which is what happens the moment you edit a contract without committing it.
+// A version must identify exactly one tree, so a dirty working tree cannot be published: pactPublish
+// refuses to run, and test runs from a dirty tree do not publish their verification results.
 fun git(vararg args: String): String =
     providers
         .exec {
@@ -19,22 +17,12 @@ fun git(vararg args: String): String =
         .get()
         .trim()
 
-fun shortHash(text: String): String =
-    java.security.MessageDigest.getInstance("SHA-1")
-        .digest(text.toByteArray())
-        .take(4)
-        .joinToString("") { "%02x".format(it) }
-
 val pactVersion: String =
     providers.environmentVariable("PACT_VERSION").orNull
-        ?: run {
-            val sha = git("describe", "--always", "--abbrev=12").ifEmpty { "0.0.0-unknown" }
-            if (git("status", "--porcelain").isEmpty()) {
-                sha
-            } else {
-                "$sha-dirty-${shortHash(git("diff", "HEAD"))}"
-            }
-        }
+        ?: git("rev-parse", "--short=12", "HEAD").ifEmpty { "0.0.0-unknown" }
+
+// Publishing from a dirty tree would attach uncommitted content to a commit hash.
+val treeIsClean: Boolean = git("status", "--porcelain").isEmpty()
 
 // The branch recorded with each published pact and provider contract. It defaults to the checked-out
 // branch: publishing a feature branch as `main` lets it satisfy main-branch selectors it was never
@@ -45,6 +33,7 @@ val gitBranch =
 
 extensions.extraProperties.set("pactConsumerBranch", System.getenv("PACT_CONSUMER_BRANCH") ?: gitBranch)
 extensions.extraProperties.set("pactProviderBranch", System.getenv("PACT_PROVIDER_BRANCH") ?: gitBranch)
+extensions.extraProperties.set("pactTreeClean", treeIsClean)
 
 allprojects {
     group = "com.example.contracttesting"
