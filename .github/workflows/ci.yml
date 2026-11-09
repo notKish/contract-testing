@@ -1,0 +1,65 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Superseded runs are cancelled: no point burning a runner on a stale commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PACT_BROKER_BASE_URL: ${{ secrets.PACT_BROKER_BASE_URL }}
+      PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+      PACT_CONSUMER_BRANCH: ${{ github.head_ref || github.ref_name }}
+      # order-service is also a message provider, so it publishes verification results too.
+      PACT_PROVIDER_BRANCH: ${{ github.head_ref || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # Both runs are broker-free: consumer tests generate pacts against a mock, message consumer
+      # tests do the same. This is what pull requests get.
+      - name: Consumer contract tests
+        run: ./gradlew :order-service:pactConsumerTest :notification-service:test
+
+      # Everything below talks to PactFlow, so it only runs where the secrets exist (pushes to main,
+      # not pull requests from forks).
+      # notification-service first: order-service's message provider test reads that pact back.
+      - name: Publish the message pact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ./gradlew :notification-service:pactPublish
+
+      - name: Publish the HTTP pacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ./gradlew :order-service:pactPublish
+
+      - name: Verify the message pact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ./gradlew :order-service:test
+
+      # Compares this consumer version with the customer-service contract deployed to `production`.
+      - name: Can I deploy?
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          version=$(git rev-parse --short=12 HEAD)
+          docker run --rm \
+            -e PACT_BROKER_BASE_URL -e PACT_BROKER_TOKEN \
+            pactfoundation/pact-cli pact-broker can-i-deploy \
+            --pacticipant order-service --version "$version" \
+            --to-environment production \
+            --retry-while-unknown 10 --retry-interval 5
