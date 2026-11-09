@@ -39,6 +39,15 @@ jobs:
 
       # Everything below talks to PactFlow, so it only runs where the secrets exist (pushes to main,
       # not pull requests from forks).
+      # Fail with a readable message instead of a connection error: a missing secret arrives as "".
+      - name: Require PactFlow secrets
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if [ -z "$PACT_BROKER_BASE_URL" ] || [ -z "$PACT_BROKER_TOKEN" ]; then
+            echo "::error::Set PACT_BROKER_BASE_URL and PACT_BROKER_TOKEN in Settings -> Secrets and variables -> Actions"
+            exit 1
+          fi
+
       # notification-service first: order-service's message provider test reads that pact back.
       - name: Publish the message pact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

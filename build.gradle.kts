@@ -18,7 +18,7 @@ fun git(vararg args: String): String =
         .trim()
 
 val pactVersion: String =
-    providers.environmentVariable("PACT_VERSION").orNull
+    providers.environmentVariable("PACT_VERSION").orNull?.takeIf { it.isNotBlank() }
         ?: git("rev-parse", "--short=12", "HEAD").ifEmpty { "0.0.0-unknown" }
 
 // Publishing from a dirty tree would attach uncommitted content to a commit hash.
@@ -31,8 +31,14 @@ val treeIsClean: Boolean = git("status", "--porcelain").isEmpty()
 val gitBranch =
     git("rev-parse", "--abbrev-ref", "HEAD").takeIf { it.isNotEmpty() && it != "HEAD" } ?: "main"
 
-extensions.extraProperties.set("pactConsumerBranch", System.getenv("PACT_CONSUMER_BRANCH") ?: gitBranch)
-extensions.extraProperties.set("pactProviderBranch", System.getenv("PACT_PROVIDER_BRANCH") ?: gitBranch)
+extensions.extraProperties.set(
+    "pactConsumerBranch",
+    System.getenv("PACT_CONSUMER_BRANCH")?.takeIf { it.isNotBlank() } ?: gitBranch,
+)
+extensions.extraProperties.set(
+    "pactProviderBranch",
+    System.getenv("PACT_PROVIDER_BRANCH")?.takeIf { it.isNotBlank() } ?: gitBranch,
+)
 extensions.extraProperties.set("pactTreeClean", treeIsClean)
 
 allprojects {

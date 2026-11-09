@@ -26,17 +26,22 @@ dependencies {
  * Broker settings come from the environment so nothing secret is committed.
  * PACT_BROKER_BASE_URL plus either PACT_BROKER_TOKEN (PactFlow) or
  * PACT_BROKER_USERNAME/PACT_BROKER_PASSWORD (the local docker broker).
+ *
+ * GitHub Actions turns a missing secret into an empty string, so blank has to mean "unset":
+ * otherwise the empty value wins over the fallback.
  */
-val brokerToken = System.getenv("PACT_BROKER_TOKEN")
+fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
+val brokerToken = env("PACT_BROKER_TOKEN")
+val brokerUser = env("PACT_BROKER_USERNAME")
 
 pact {
     broker {
-        pactBrokerUrl = System.getenv("PACT_BROKER_BASE_URL") ?: "http://localhost:9292"
+        pactBrokerUrl = env("PACT_BROKER_BASE_URL") ?: "http://localhost:9292"
         if (brokerToken != null) {
             pactBrokerToken = brokerToken
-        } else if (System.getenv("PACT_BROKER_USERNAME") != null) {
-            pactBrokerUsername = System.getenv("PACT_BROKER_USERNAME")
-            pactBrokerPassword = System.getenv("PACT_BROKER_PASSWORD")
+        } else if (brokerUser != null) {
+            pactBrokerUsername = brokerUser
+            pactBrokerPassword = env("PACT_BROKER_PASSWORD")
         }
     }
     publish {
@@ -52,10 +57,10 @@ pact {
 tasks.withType<Test>().configureEach {
     // Pacts come from the broker, so this needs `docker compose -f docker-compose.broker.yml up -d`.
     // Credentials come from the environment; the values below match docker-compose.broker.yml.
-    systemProperty("pactbroker.url", System.getenv("PACT_BROKER_BASE_URL") ?: "http://localhost:9292")
+    systemProperty("pactbroker.url", env("PACT_BROKER_BASE_URL") ?: "http://localhost:9292")
     // pact-jvm uses basic auth whenever a username is set, so the token case has to blank it.
-    systemProperty("pactbroker.auth.username", if (brokerToken != null) "" else System.getenv("PACT_BROKER_USERNAME") ?: "pact")
-    systemProperty("pactbroker.auth.password", if (brokerToken != null) "" else System.getenv("PACT_BROKER_PASSWORD") ?: "pact")
+    systemProperty("pactbroker.auth.username", if (brokerToken != null) "" else env("PACT_BROKER_USERNAME") ?: "pact")
+    systemProperty("pactbroker.auth.password", if (brokerToken != null) "" else env("PACT_BROKER_PASSWORD") ?: "pact")
     systemProperty("pactbroker.auth.token", brokerToken ?: "")
     // Verification results are published back to the broker, keyed by provider version + branch.
     // A dirty tree would attach uncommitted behaviour to a commit hash, so it only tests locally.
