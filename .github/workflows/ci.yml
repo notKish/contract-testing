@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/pactflow]
   pull_request:
 
 # Superseded runs are cancelled: no point burning a runner on a stale commit.
@@ -37,11 +37,11 @@ jobs:
       - name: Consumer contract tests
         run: ./gradlew :order-service:pactConsumerTest :notification-service:test
 
-      # Everything below talks to PactFlow, so it only runs where the secrets exist (pushes to main,
-      # not pull requests from forks).
+      # Everything below talks to PactFlow, so it only runs where the secrets exist (pushes, not
+      # pull requests from forks). on.push decides which branches publish.
       # Fail with a readable message instead of a connection error: a missing secret arrives as "".
       - name: Require PactFlow secrets
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push'
         run: |
           if [ -z "$PACT_BROKER_BASE_URL" ] || [ -z "$PACT_BROKER_TOKEN" ]; then
             echo "::error::Set PACT_BROKER_BASE_URL and PACT_BROKER_TOKEN in Settings -> Secrets and variables -> Actions"
@@ -50,20 +50,20 @@ jobs:
 
       # notification-service first: order-service's message provider test reads that pact back.
       - name: Publish the message pact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push'
         run: ./gradlew :notification-service:pactPublish
 
       - name: Publish the HTTP pacts
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push'
         run: ./gradlew :order-service:pactPublish
 
       - name: Verify the message pact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push'
         run: ./gradlew :order-service:test
 
       # Compares this consumer version with the customer-service contract deployed to `production`.
       - name: Can I deploy?
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push'
         run: |
           version=$(git rev-parse --short=12 HEAD)
           docker run --rm \
