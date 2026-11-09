@@ -40,3 +40,6 @@ build
 .project
 .settings/
 bin/
+
+# The wrapper jar must ship with the repo: a fresh checkout has no gradle installed.
+!gradle/wrapper/gradle-wrapper.jar
