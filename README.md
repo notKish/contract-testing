@@ -105,8 +105,10 @@ things worth knowing from here:
 
 - PactFlow rejects `--verification-success` on its own with `selfVerificationResults.content is
   missing`; the provider task attaches a results file, so the failure is not in this repo.
-- The consumer-driven verifier for these pacts now runs there (`./gradlew test`), against the same
-  broker and provider version.
+- The provider is BDCT-only: it publishes the OAS with self-verification evidence and no longer
+  runs the pact verifier, so there are no consumer-driven results for this pair. Keeping the
+  OpenAPI document honest (attach a conformance run as evidence) is what makes the comparison
+  meaningful.
 
 ### Deployment safety check
 
@@ -162,7 +164,13 @@ Version pins (`gradle/libs.versions.toml`), all verified against Maven Central:
 - `au.com.dius.pact` Gradle plugin **4.6.21**.
 
 ## Notes and gotchas
-
+- **open source bi-directional contract testing**: https://github.com/pactflow/openapi-pact-comparator. 
+  lets you compare a consumer pact with an openapi specification. This has been inspired by swagger-
+  mock-validator. however, we will not get the full features of pactflow bdct like no broker (doesn't store
+  contracts), no `can-i-deploy`, environments or record-deployment. no fetching of pacts. cheap setup would 
+  be self-host pact broker and have consumer publish pacts with --branch. In provider CI, fetch the pacts for 
+  main branch and deployed consumers, then run them through Comparator against your OAS. run oas(open api spec)
+  through a verifier like (schemathesis), so that oas is trusted. Block any build on failure.
 - **Kafka needs no plugin here.** Pact models the Kafka message body/metadata as a message
   interaction; the transport (topic, broker) is your application's concern, not pact-jvm's. There is
   no `consumer:kafka` artefact on Maven Central — that is the Pact *plugin* ecosystem, only needed
@@ -188,3 +196,4 @@ Version pins (`gradle/libs.versions.toml`), all verified against Maven Central:
 - Gradle configuration cache is on (`gradle.properties`). Anything reading `System.getenv` at
   configuration time (the broker credentials here) is configuration-cache input; pass them on the
   command line or via `~/.gradle/gradle.properties` if you hit cache invalidation noise.
+- 
