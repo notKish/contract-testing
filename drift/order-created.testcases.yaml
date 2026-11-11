@@ -1,0 +1,49 @@
+---
+drift-testcase-file: v1
+title: "order-service outbound events"
+
+sources:
+  - name: order-service
+    path: ../docs/asyncapi/order-service-messages.yaml
+
+plugins:
+  - name: asyncapi
+  - name: kafka
+  - name: json
+
+operations:
+  # order-service's AsyncAPI operation is `action: send`, so Drift subscribes
+  # and captures — the opposite of what the service does.
+  SendOrderCreated_Observe:
+    target: >-
+      order-service:order.created_send_publish:com.example.order.OrderCreatedEvent
+    description: "Observe the order.created event published after POST /orders"
+    parameters:
+      timeout-ms: 10000
+      # Correlation is by the orderId in the payload (declared as the
+      # message's correlationId location), so the trigger must use this one.
+      orderId: 11111111-2222-3333-4444-555555555555
+      customerId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+    trigger:
+      executable-type: command
+      value: curl
+      parameters:
+        args:
+          - "-fsS"
+          # Drift requires the hook to write valid JSON to stdout.
+          - "-w"
+          - '{"status":%{http_code}}'
+          - "-X"
+          - "POST"
+          - "http://localhost:8080/orders"
+          - "-H"
+          - "content-type: application/json"
+          - "-d"
+          - '{"orderId":"${parameters.orderId}","customerId":"${parameters.customerId}"}'
+      timeout-ms: 5000
+    expected:
+      payload:
+        orderId: ${parameters.orderId}
+        customerId: ${parameters.customerId}
+        total: 42.5
+        createdAt: "2026-01-01T00:00:00Z"

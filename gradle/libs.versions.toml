@@ -2,12 +2,22 @@
 # Spring Boot 3.5.x (Spring Framework 6) -- see README for why this is pinned.
 spring-boot = "3.5.16"
 spring-dependency-management = "1.1.7"
-# pact-jvm 4.4+ documents `pact.rootDir` as unchanged; 4.5/4.6 are the stable Spring 6 era releases.
-pact-jvm = "4.6.21"
+# 4.7.1+ adds `reference()` to the V4 message interaction builder, which is how a message pact
+# points PactFlow at its AsyncAPI operationId. Only the message builder is used here; the
+# junit5spring module (the 4.7.x Spring 5.3 pin the README warns about) is not on any classpath.
+pact-jvm = "4.7.7"
 # The pact Gradle plugin (pactVerify / pactPublish / canIDeploy) is versioned independently.
-pact-gradle-plugin = "4.6.21"
+pact-gradle-plugin = "4.7.7"
 # Generates /v3/api-docs from the Spring controllers; 2.8.x targets Spring Boot 3.x.
 springdoc = "2.8.6"
+# Generates the AsyncAPI provider contract from the Kafka publisher annotations. 1.x is the last
+# line built against Spring Boot 3.5; 2.0.0+ requires Spring Boot 4 and fails to load here with
+# "Could not find class [org.springframework.boot.thread.Threading]".
+springwolf = "1.21.0"
+# Swagger annotations mark payload fields as required; springwolf only pulls swagger-models.
+swagger = "2.2.40"
+# Validates the generated payload schema against sample messages in the contract test.
+json-schema-validator = "1.5.9"
 appVersion = "0.1.0"
 
 [libraries]
@@ -15,6 +25,9 @@ pact-consumer-junit5 = { module = "au.com.dius.pact.consumer:junit5", version.re
 pact-provider-junit5 = { module = "au.com.dius.pact.provider:junit5", version.ref = "pact-jvm" }
 pact-provider-junit5spring = { module = "au.com.dius.pact.provider:junit5spring", version.ref = "pact-jvm" }
 springdoc-openapi-webmvc-api = { module = "org.springdoc:springdoc-openapi-starter-webmvc-api", version.ref = "springdoc" }
+springwolf-kafka = { module = "io.github.springwolf:springwolf-kafka", version.ref = "springwolf" }
+swagger-annotations = { module = "io.swagger.core.v3:swagger-annotations-jakarta", version.ref = "swagger" }
+json-schema-validator = { module = "com.networknt:json-schema-validator", version.ref = "json-schema-validator" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

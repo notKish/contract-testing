@@ -1,0 +1,92 @@
+---
+asyncapi: "3.0.0"
+info:
+  title: "order-service messages"
+  version: "1.0.0"
+  x-generator: "springwolf"
+defaultContentType: "application/json"
+servers:
+  local:
+    host: "localhost:9092"
+    protocol: "kafka"
+channels:
+  order.created:
+    address: "order.created"
+    messages:
+      com.example.order.OrderCreatedEvent:
+        $ref: "#/components/messages/com.example.order.OrderCreatedEvent"
+    bindings: {}
+components:
+  schemas:
+    Headers-1270726993:
+      title: "Headers-1270726993"
+      type: "object"
+      properties:
+        contentType:
+          title: "contentType"
+          type: "string"
+          description: "The message content type"
+      examples:
+        - contentType: "string"
+    com.example.order.OrderCreatedEvent:
+      title: "OrderCreatedEvent"
+      type: "object"
+      properties:
+        createdAt:
+          type: "string"
+          format: "date-time"
+        customerId:
+          type: "string"
+          format: "uuid"
+        orderId:
+          type: "string"
+          format: "uuid"
+        total:
+          type: "number"
+          description: "Order total, in the store currency."
+          format: "double"
+      examples:
+        - createdAt: "2015-07-20T15:49:04-07:00"
+          customerId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          orderId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          total: 1.1
+      required:
+        - "createdAt"
+        - "customerId"
+        - "orderId"
+        - "total"
+  messages:
+    com.example.order.OrderCreatedEvent:
+      headers:
+        title: "Headers-1270726993"
+        type: "object"
+        properties:
+          contentType:
+            title: "contentType"
+            type: "string"
+            description: "The message content type"
+        examples:
+          - contentType: "string"
+      payload:
+        schemaFormat: "application/vnd.aai.asyncapi+json;version=3.0.0"
+        schema:
+          $ref: "#/components/schemas/com.example.order.OrderCreatedEvent"
+      name: "com.example.order.OrderCreatedEvent"
+      title: "OrderCreatedEvent"
+      bindings:
+        kafka:
+          bindingVersion: "0.5.0"
+      correlationId:
+        location: "$message.payload#/orderId"
+operations:
+  order.created_send_publish:
+    action: "send"
+    channel:
+      $ref: "#/channels/order.created"
+    title: "order.created_send"
+    description: "An order was created"
+    bindings:
+      kafka:
+        bindingVersion: "0.5.0"
+    messages:
+      - $ref: "#/channels/order.created/messages/com.example.order.OrderCreatedEvent"

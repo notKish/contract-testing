@@ -24,20 +24,16 @@ val pactVersion: String =
 // Publishing from a dirty tree would attach uncommitted content to a commit hash.
 val treeIsClean: Boolean = git("status", "--porcelain").isEmpty()
 
-// The branch recorded with each published pact and provider contract. It defaults to the checked-out
-// branch: publishing a feature branch as `main` lets it satisfy main-branch selectors it was never
-// verified on. CI overrides per side with PACT_CONSUMER_BRANCH / PACT_PROVIDER_BRANCH; a detached
-// HEAD (no branch name) falls back to `main` unless one of those is set.
+// The branch recorded with each published pact. It defaults to the checked-out branch: publishing a
+// feature branch as `main` lets it satisfy main-branch selectors it was never verified on. CI
+// overrides it with PACT_CONSUMER_BRANCH; a detached HEAD (no branch name) falls back to `main`
+// unless that is set.
 val gitBranch =
     git("rev-parse", "--abbrev-ref", "HEAD").takeIf { it.isNotEmpty() && it != "HEAD" } ?: "main"
 
 extensions.extraProperties.set(
     "pactConsumerBranch",
     System.getenv("PACT_CONSUMER_BRANCH")?.takeIf { it.isNotBlank() } ?: gitBranch,
-)
-extensions.extraProperties.set(
-    "pactProviderBranch",
-    System.getenv("PACT_PROVIDER_BRANCH")?.takeIf { it.isNotBlank() } ?: gitBranch,
 )
 extensions.extraProperties.set("pactTreeClean", treeIsClean)
 
