@@ -51,15 +51,30 @@ class AsyncApiContractTest {
         assertTrue(document.at("/operations").has(OPERATION_ID),
                 "Springwolf renamed the operation: update the AsyncAPI reference in OrderCreatedPactTest");
 
+        //
+        // Overlay, kept to the minimum a tool forces us to make. Everything here is either
+        // something Springwolf cannot express (correlationId) or something Drift cannot read
+        // ($ref-typed headers). Nothing else in the document is touched.
         JsonNode message = onlyMessage(document);
-        // Springwolf has nowhere to declare a correlation ID and Drift needs one to pick the message
-        // out of live traffic. Correlation is by the orderId the trigger supplied.
+        // Drift matches captured messages by a declared correlationId location; Springwolf has no
+        // annotation for it, and header-based correlation tripped Drift's header-schema check.
         ((ObjectNode) message)
                 .set("correlationId", JSON.createObjectNode().put("location", "$message.payload#/orderId"));
-        // Drift does not resolve a $ref for the message headers schema, so inline it.
+        // Drift does not resolve a $ref for the message headers schema, so inline it. Once inlined,
+        // the component it pointed at is an orphan unless another message still references it.
         JsonNode headers = message.get("headers");
         if (headers != null && headers.has("$ref")) {
-            ((ObjectNode) message).set("headers", resolve(document, headers));
+            String ref = headers.get("$ref").asText();
+            ObjectNode inlined = resolve(document, headers).deepCopy();
+            // The component name is generated (Headers-<hash>); it means nothing once inlined.
+            if (inlined.path("title").asText("").startsWith("Headers-")) {
+                inlined.remove("title");
+            }
+            ((ObjectNode) message).set("headers", inlined);
+            if (!document.toString().contains(ref)) {
+                ((ObjectNode) document.at("/components/schemas"))
+                        .remove(ref.substring(ref.lastIndexOf('/') + 1));
+            }
         }
 
         Path output = Path.of(System.getProperty("asyncapi.output"));
